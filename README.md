@@ -7,17 +7,29 @@ RTL list
 
 ---------------------------------------------
 
-1. Absolute Fixed Priority Aerbiter
+1. Absolute Fixed Priority Arbiter
 
 ArbFixedPriorityAbs.v
 
-2. Non-Absolute Fixed Priority Aerbiter
+2. Non-Absolute Fixed Priority Arbiter
 
 ArbFixedPriorityNAbs.v
 
-3. Non-Absolute Fixed Priority Aerbiter with LOCK function
+3. Non-Absolute Fixed Priority Arbiter with LOCK function
 
 ArbFixedPriorityLocked.v
+
+4. Dynamic priority arbiter
+
+ArbDynamicPriority.v
+
+---------------------------------------------
+
+Detail Description
+
+---------------------------------------------
+
+http://nguyenquanicd.blogspot.com/search/label/Arbiter?&max-results=5
 
 ---------------------------------------------
 
