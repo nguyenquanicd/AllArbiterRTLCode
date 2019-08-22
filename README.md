@@ -23,6 +23,10 @@ ArbFixedPriorityLocked.v
 
 ArbDynamicPriority.v
 
+5. Simple Round Robin with a counter
+
+ArbSimpleRR.v
+
 ---------------------------------------------
 
 Detail Description
