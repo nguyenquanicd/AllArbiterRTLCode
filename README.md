@@ -27,6 +27,10 @@ ArbDynamicPriority.v
 
 ArbSimpleRR.v
 
+6. Round Robin arbiter with Priority logic
+
+ArbPriorityRR.v
+
 ---------------------------------------------
 
 Detail Description
