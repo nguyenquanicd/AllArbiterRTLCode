@@ -1,5 +1,6 @@
 # AllArbiterRTLCode
-RTL code of some arbitration algorithms
+RTL code of some arbitration algorithms which are able to synthesize.
+I tried to synthesize on Quartus II, a software of Altera for FPGA.
 
 ---------------------------------------------
 
@@ -30,6 +31,10 @@ ArbSimpleRR.v
 6. Round Robin arbiter with Priority logic
 
 ArbPriorityRR.v
+
+7. Balance Round Robin
+
+ArbBalanceRR.v
 
 ---------------------------------------------
 
