@@ -2,10 +2,13 @@
 //Author  : Nguyen Hung Quan
 //Website : https://nguyenquanicd.blogspot.com/
 //Date    : 2019.Aug.15
-//Function: Priority Round Robin (RR) Arbiter
-//  - Use a counter to share access right
-//  - Can allocate the grant to a request source
-//    outside its time slice/slot
+//Update  : 2026.Oct.10 - COUNTER_W is a localparam, REQ_NUM=1 is legal,
+//          lint clean. Header comment corrected.
+//Function: Balance Round Robin Arbiter (least-recently-granted first)
+//  - Every request source has a priority level register (0 = highest)
+//  - The granted source moves to the lowest level, the sources below it move up
+//  - Work-conserving: the grant can be given to any asserted request,
+//    there is no empty time slice/slot
 //-------------------------------------------
 module ArbBalanceRR (
   clk,
@@ -15,7 +18,10 @@ module ArbBalanceRR (
   );
   //
   parameter REQ_NUM    = 4;
-  parameter COUNTER_W  = clog2(REQ_NUM);
+  //Derived constants (do not override)
+  localparam COUNTER_W = clog2(REQ_NUM);
+  localparam [31:0] LAST_32 = REQ_NUM-1;
+  localparam [COUNTER_W-1:0] LAST = LAST_32[COUNTER_W-1:0];   //last counter value
   //
   input  clk;
   input  rst_n;
@@ -60,19 +66,20 @@ module ArbBalanceRR (
   generate
     genvar i;
 	  for (i = 0; i < REQ_NUM; i = i+1) begin: pRegGen
+		    localparam [COUNTER_W-1:0] P_INIT = i;   //reset value: request i has level i
 	    always @ (posedge clk, negedge rst_n) begin
 	      if (~rst_n)
-		    pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] <= i;
+		    pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] <= P_INIT;
 		  //Set to lowest priority level after granting
 		  else if (updateP) begin
 		    if (nextGrant[i])
-		      pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] <= REQ_NUM - 1;
+		      pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] <= LAST;
 		    else if (pReg[COUNTER_W*(i+1)-1:i*COUNTER_W]
         >= cPriorityLevel[COUNTER_W*REQ_NUM-1:(REQ_NUM-1)*COUNTER_W])
 		    //Increase the higher priority level by minusing 1
 		    //if the current priority level is different from 0 
 		      pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] <= 
-          pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] - 1;
+          pReg[COUNTER_W*(i+1)-1:i*COUNTER_W] - 1'b1;
 	      end
 	    end
 	  end
@@ -161,11 +168,11 @@ module ArbBalanceRR (
   function reg orOut;
     input [REQ_NUM*REQ_NUM-1:0] orIn;
 	input integer id;
-	integer i;
+	integer ii;
     begin
       orOut = 1'b0;
-      for (i=0; i<REQ_NUM; i=i+1) begin
-        orOut = orOut | orIn[id+i*REQ_NUM];
+      for (ii=0; ii<REQ_NUM; ii=ii+1) begin
+        orOut = orOut | orIn[id+ii*REQ_NUM];
       end
     end
   endfunction
@@ -173,14 +180,19 @@ module ArbBalanceRR (
   //log2 function - Not for synthesizing
   //Only use to calculate the parameter value
   //-----------------------------------------------------------
-  function integer clog2; 
-    input integer value; 
-	  integer i;
-    begin 
-      clog2 = 0;
-      for(i = 0; 2**i < value; i = i + 1) 
-        clog2 = i + 1; 
-      end
+  //-----------------------------------------------------------
+  //ceil(log2(value)) with a minimum of 1, so REQ_NUM=1 does not create
+  //a zero-width (reversed range) vector.
+  //Not for synthesizing - only used to calculate constants
+  //-----------------------------------------------------------
+  function integer clog2;
+    input integer value;
+    integer ii;
+    begin
+      clog2 = 1;
+      for (ii = 0; 2**ii < value; ii = ii + 1)
+        clog2 = ii + 1;
+    end
   endfunction
   //
 endmodule

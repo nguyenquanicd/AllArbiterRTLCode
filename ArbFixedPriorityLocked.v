@@ -2,6 +2,9 @@
 //Author  : Nguyen Hung Quan
 //Website : https://nguyenquanicd.blogspot.com/
 //Date    : 2019.Aug.15
+//Update  : 2026.Oct.10 - FIX: grant is one-hot at all times (a lock owner that released
+//          lockIn and requested together with a higher priority source used to produce
+//          two grants). Hazard: lockIn held high keeps all other sources blocked.
 //Function: Fixed priority Arbiter with the request lockIn
 //  - req[0] has highest priority.
 //  - A source which has a granted request, can lock the current grant
@@ -29,8 +32,15 @@ module ArbFixedPriorityLocked (
   reg [REQ_NUM-1:0] lockReg;
   wire noGrant;
   wire noLock;
+  wire arbEn;
   //
   assign noGrant = ~|grant[REQ_NUM-1:0];
+  //Arbitrate only when nothing is granted, nothing is locked AND no lock owner is
+  //requesting. A lock owner that requests always wins through its lockReg branch;
+  //without the last term the arbitration could grant a second source at the same
+  //time (two grants) when the owner released lockIn and requested together with a
+  //higher priority source.
+  assign arbEn = noLock & noGrant & ~|(lockReg[REQ_NUM-1:0] & req[REQ_NUM-1:0]);
   //
   //Grant logic
   //
@@ -40,7 +50,7 @@ module ArbFixedPriorityLocked (
 	  always @ (*) begin
       if (lockReg[0])
 	      nextGrant[0] = req[0];
-      else if (noLock & noGrant)
+      else if (arbEn)
 	      nextGrant[0] = req[0]; //highest priority, do not care other requests
 	    else
 	      nextGrant[0] = req[0] & grant[0];
@@ -50,7 +60,7 @@ module ArbFixedPriorityLocked (
       always @ (*) begin
         if (lockReg[i])
 	        nextGrant[i] = req[i];
-        else if (noLock & noGrant)
+        else if (arbEn)
 	        nextGrant[i] = req[i] & ~|req[i-1:0]; //low priority, must care higher priority
 	  	  else
 	  	    nextGrant[i] = req[i] & grant[i];

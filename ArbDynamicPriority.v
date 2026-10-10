@@ -2,6 +2,9 @@
 //Author  : Nguyen Hung Quan
 //Website : https://nguyenquanicd.blogspot.com/
 //Date    : 2019.Aug.20
+//Update  : 2026.Oct.10 - FIX: a priority level outside 0..REQ_NUM-1 is treated as the
+//          lowest level (the request was ignored when REQ_NUM is not a power of 2),
+//          derived parameters are localparams, REQ_NUM=1 is legal
 //Function: Dynamic priority Arbiter
 //  - All requests is arbitrated on its priority level
 //  - If priority levels are same, request source of 
@@ -15,8 +18,13 @@ module ArbDynamicPriority (
   grant
   );
   parameter REQ_NUM    = 4;
-  parameter PRI_WIDTH  = clog2(REQ_NUM);
-  parameter PRI_TOTALW = REQ_NUM*PRI_WIDTH;
+  //Derived constants (do not override)
+  localparam PRI_WIDTH  = clog2(REQ_NUM);
+  localparam PRI_TOTALW = REQ_NUM*PRI_WIDTH;
+  localparam [31:0] LAST_32 = REQ_NUM-1;
+  localparam [31:0] NUM_32  = REQ_NUM;
+  localparam [PRI_WIDTH-1:0] PRI_LOWEST = LAST_32[PRI_WIDTH-1:0];   //lowest priority level
+  localparam [PRI_WIDTH:0]   REQ_NUM_W  = NUM_32[PRI_WIDTH:0];
   //
   input  clk;
   input  rst_n;
@@ -24,6 +32,7 @@ module ArbDynamicPriority (
   input  [PRI_TOTALW-1:0] priorityLevel;
   output reg [REQ_NUM-1:0] grant;
   //
+  wire [PRI_TOTALW-1:0] levelEff;
   wire [REQ_NUM*REQ_NUM-1:0] compResult;
   wire noGrant;
   wire [REQ_NUM-1:0] orPriorityResult;
@@ -36,11 +45,22 @@ module ArbDynamicPriority (
     genvar i0;
     genvar i1;
 	  //--------------------------------------
+    //(0) Priority level check
+    //    A level outside the legal range 0..REQ_NUM-1 (possible when REQ_NUM
+    //    is not a power of 2) is treated as the LOWEST level. The request is
+    //    still arbitrated (it used to be ignored forever).
+	  //--------------------------------------
+    for (i0 = 0; i0 < REQ_NUM; i0=i0+1) begin: uLevel
+      assign levelEff[PRI_WIDTH*(i0+1)-1:PRI_WIDTH*i0] =
+             ({1'b0, priorityLevel[PRI_WIDTH*(i0+1)-1:PRI_WIDTH*i0]} >= REQ_NUM_W)?
+             PRI_LOWEST: priorityLevel[PRI_WIDTH*(i0+1)-1:PRI_WIDTH*i0];
+    end
+	  //--------------------------------------
     //(1) Priority selection
     //--------------------------------------
     for (i0 = 0; i0 < REQ_NUM; i0=i0+1) begin: uComp
       for (i1 = 0; i1 < REQ_NUM; i1=i1+1) begin: bitComp
-	      assign compResult[i1+i0*REQ_NUM] = req[i0] & (priorityLevel[PRI_WIDTH*(i0+1)-1:PRI_WIDTH*i0] == i1);
+	      assign compResult[i1+i0*REQ_NUM] = req[i0] & (levelEff[PRI_WIDTH*(i0+1)-1:PRI_WIDTH*i0] == i1);
 	    end
     end
     //--------------------------------------
@@ -115,13 +135,18 @@ module ArbDynamicPriority (
   //log2 function - Not for synthesizing
   //Only use to calculate the parameter value
   //-----------------------------------------------------------
-  function integer clog2; 
-    input integer value; 
-    integer i; 
-    begin 
-      clog2 = 0; 
-      for(i = 0; 2**i < value; i=i+1) 
-        clog2 = i + 1; 
-      end 
+  //-----------------------------------------------------------
+  //ceil(log2(value)) with a minimum of 1, so REQ_NUM=1 does not create
+  //a zero-width (reversed range) vector.
+  //Not for synthesizing - only used to calculate constants
+  //-----------------------------------------------------------
+  function integer clog2;
+    input integer value;
+    integer ii;
+    begin
+      clog2 = 1;
+      for (ii = 0; 2**ii < value; ii = ii + 1)
+        clog2 = ii + 1;
+    end
   endfunction 
 endmodule //ArbDynamicPriority

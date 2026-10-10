@@ -2,6 +2,9 @@
 //Author  : Nguyen Hung Quan
 //Website : https://nguyenquanicd.blogspot.com/
 //Date    : 2019.Aug.15
+//Update  : 2026.Oct.10 - FIX: the grant is held while req is asserted (was revoked
+//          by a newcomer), module priorityLogic renamed ArbPriorityLogic,
+//          COUNTER_W is a localparam, REQ_NUM=1 is legal
 //Function: Priority Round Robin (RR) Arbiter
 //  - Use a counter to share access right
 //  - The priority level of request source is changed
@@ -20,7 +23,10 @@ module ArbPriorityRR (
   grant
   );
   parameter REQ_NUM    = 4;
-  parameter COUNTER_W  = clog2(REQ_NUM);
+  //Derived constants (do not override)
+  localparam COUNTER_W = clog2(REQ_NUM);
+  localparam [31:0] LAST_32 = REQ_NUM-1;
+  localparam [COUNTER_W-1:0] LAST = LAST_32[COUNTER_W-1:0];   //last counter value
   //
   input  clk;
   input  rst_n;
@@ -43,7 +49,7 @@ module ArbPriorityRR (
     if (~rst_n)
 	    rrCounter[COUNTER_W-1:0] <= {COUNTER_W{1'b0}};
 	  else if (incCounter) begin
-	    if (rrCounter[COUNTER_W-1:0] == REQ_NUM-1)
+	    if (rrCounter[COUNTER_W-1:0] == LAST)
 	      rrCounter[COUNTER_W-1:0] <= {COUNTER_W{1'b0}};
       else
 	      rrCounter[COUNTER_W-1:0] <= rrCounter[COUNTER_W-1:0] + 1'b1;
@@ -63,7 +69,7 @@ module ArbPriorityRR (
   //Connect inputs to priority logic
   //
   //for req[0]
-  priorityLogic #(.REQ_NUM(REQ_NUM)) priorityLogic0 (
+  ArbPriorityLogic #(.REQ_NUM(REQ_NUM)) priorityLogic0 (
        .Sel(prioritySel[0]),
        .reqIn(req[REQ_NUM-1:0]),
        .reqOut(reqOut[REQ_NUM-1:0])
@@ -73,7 +79,7 @@ module ArbPriorityRR (
 	  for (j = 1; j < REQ_NUM; j=j+1) begin: uPResult
       //Note: Can NOT declare instance array priorityLogic[j] -> Can NOT synthesize
       //Must declare priorityLogic[j:j]
-      priorityLogic #(.REQ_NUM(REQ_NUM)) priorityLogic (
+      ArbPriorityLogic #(.REQ_NUM(REQ_NUM)) priorityLogic (
        .Sel(prioritySel[j]),
        .reqIn({req[j-1:0], req[REQ_NUM-1:j]}),
        .reqOut(reqOut[REQ_NUM*(j+1)-1:j*REQ_NUM])
@@ -110,7 +116,11 @@ module ArbPriorityRR (
     else if (noGrant)
       grant[REQ_NUM-1:0] <= nextGrant[REQ_NUM-1:0];
     else
-      grant[REQ_NUM-1:0] <= nextGrant[REQ_NUM-1:0] & grant[REQ_NUM-1:0];
+      //Keep the grant while the request is asserted (non-preemptive).
+      //Old code was "nextGrant & grant": a newcomer with a better rotated
+      //priority revoked the current grant while its request was still asserted,
+      //and the counter never advanced (starvation).
+      grant[REQ_NUM-1:0] <= grant[REQ_NUM-1:0] & req[REQ_NUM-1:0];
   end
   //
   //For synthesis
@@ -129,20 +139,24 @@ module ArbPriorityRR (
   //
   //Not for sunthesis, Only use to calculate the parameter
   //
-  function integer clog2; 
-   input integer value;
-	 integer ii;
+  //-----------------------------------------------------------
+  //ceil(log2(value)) with a minimum of 1, so REQ_NUM=1 does not create
+  //a zero-width (reversed range) vector.
+  //Not for synthesizing - only used to calculate constants
+  //-----------------------------------------------------------
+  function integer clog2;
+    input integer value;
+    integer ii;
     begin
-      clog2 = 0; 
-      for(ii = 0; 2**ii < value; ii = ii+1) begin
-        clog2 = ii + 1; 
-      end
-    end      
+      clog2 = 1;
+      for (ii = 0; 2**ii < value; ii = ii + 1)
+        clog2 = ii + 1;
+    end
   endfunction
   //
 endmodule //ArbPriorityRR
 
-module priorityLogic (Sel, reqIn, reqOut);
+module ArbPriorityLogic (Sel, reqIn, reqOut);
   parameter REQ_NUM    = 2;
   //
   input Sel;
